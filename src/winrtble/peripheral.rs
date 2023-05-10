@@ -44,14 +44,16 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use std::sync::Weak;
-use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType};
+use futures::future::ok;
+use windows::core::Type;
+use windows::Devices::Bluetooth::{Advertisement::*, BluetoothAddressType, BluetoothLEDevice};
 
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
     serde(crate = "serde_cr")
 )]
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeripheralId(BDAddr);
 
 impl Display for PeripheralId {
@@ -83,6 +85,7 @@ struct Shared {
     latest_service_data: RwLock<HashMap<Uuid, Vec<u8>>>,
     services: RwLock<HashSet<Uuid>>,
     class: RwLock<Option<u32>>,
+    appearance: RwLock<Option<u16>>,
 }
 
 impl Peripheral {
@@ -104,6 +107,7 @@ impl Peripheral {
                 latest_service_data: RwLock::new(HashMap::new()),
                 services: RwLock::new(HashSet::new()),
                 class: RwLock::new(None),
+                appearance: RwLock::new(None),
             }),
         }
     }
@@ -128,6 +132,7 @@ impl Peripheral {
                 .copied()
                 .collect(),
             class: *self.shared.class.read().unwrap(),
+            appearance: *self.shared.appearance.read().unwrap(),
         }
     }
 
@@ -344,7 +349,18 @@ impl ApiPeripheral for Peripheral {
     /// Returns the set of properties associated with the peripheral. These may be updated over time
     /// as additional advertising reports are received.
     async fn properties(&self) -> Result<Option<PeripheralProperties>> {
-        Ok(Some(self.derive_properties()))
+        let mut properties = self.derive_properties();
+
+        if let Ok(async_op) = BluetoothLEDevice::FromBluetoothAddressAsync(self.address().into()) {
+            if let Ok(device) = async_op.await {
+                properties.appearance = match device.Appearance().ok() {
+                    Some(appearance) => appearance.RawValue().ok(),
+                    None => None,
+                };
+            }
+        }
+
+        Ok(Some(properties))
     }
 
     fn services(&self) -> BTreeSet<Service> {

@@ -150,6 +150,7 @@ impl api::Peripheral for Peripheral {
             service_data: device_info.service_data,
             services: device_info.services,
             class: device_info.class,
+            appearance: device_info.appearance,
         }))
     }
 

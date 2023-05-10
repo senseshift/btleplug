@@ -194,6 +194,8 @@ pub struct PeripheralProperties {
     /// Advertised services for this device
     pub services: Vec<Uuid>,
     pub class: Option<u32>,
+    /// Advertised device appearance raw data
+    pub appearance: Option<u16>,
 }
 
 #[cfg_attr(
